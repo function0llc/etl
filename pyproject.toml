@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "etl-loader"
+version = "0.1.0"
+description = "Standalone Python/Qt ETL loader for CSV/XLSX to PostgreSQL"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "PySide6>=6.7",
+  "pandas>=2.2",
+  "openpyxl>=3.1",
+  "SQLAlchemy>=2.0",
+  "psycopg[binary]>=3.2",
+  "platformdirs>=4.2",
+  "keyring>=25.2",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.2",
+  "pyinstaller>=6.8",
+]
+
+[project.scripts]
+etl-loader = "app.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
