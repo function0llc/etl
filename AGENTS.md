@@ -1,278 +1,104 @@
+# Project AI Instructions
 
+Always read `MEMORY.md` before analysis, planning, refactoring, implementation, or code review. Follow the architecture, risks, and conventions recorded there. If `MEMORY.md` is missing or stale, create/update it as part of the work and keep it concise.
 
-## Project AI Instructions
+## Project Identity
 
-Always read `MEMORY.md` before performing analysis, planning, refactoring, or implementation tasks or making changes.
-Follow the architectural conventions, dependency boundaries, and implementation notes documented there.
+This repo is `etl-loader`: a Python 3.11+ standalone PySide6 desktop app for loading CSV/XLSX data into PostgreSQL. It has no web frontend/backend split. The GUI orchestrates a local ETL workflow, while domain logic lives in testable core modules.
 
-Update `MEMORY.md` whenever major architectural or workflow changes are introduced.
+Primary workflow: select source file -> connect/introspect PostgreSQL -> suggest table/column mappings -> validate rows -> dry-run or insert rows transactionally.
 
-Review and analyze the entire project comprehensively, including:
+## Commands
 
-* Source code
-* File and directory structure
-* Build tooling and package management
-* Environment variables and runtime configuration
-* Dependencies and dependency relationships
-* Database schema, migrations, and ORM models
-* APIs, integrations, and external services
-* Frontend architecture
-* Backend architecture
-* Infrastructure and deployment configuration
-* Authentication and authorization flows
-* State management patterns
-* Background jobs, queues, schedulers, and workers
-* Testing architecture and coverage
-* CI/CD workflows
-* Logging, monitoring, and observability
-* Feature flags and configuration systems
+Use only commands that match the current project tooling.
 
-Your objective is to build a complete operational understanding of the application so future development can continue efficiently from a completely fresh AI context window with minimal rediscovery work.
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -e '.[dev]'
+python -m app.main
+pytest
+pyinstaller packaging/pyinstaller/etl-loader.spec
+```
 
-After completing the analysis, update `MEMORY.md` in the project root directory.
+Run `pytest` after changing core ETL, validation, mapping, persistence, or transform logic. UI-only changes may need a manual `python -m app.main` smoke test. Packaging/dependency changes require checking the PyInstaller spec.
 
-`MEMORY.md` is intended to function as the persistent high-signal engineering memory layer for future AI-assisted development sessions.
+## Architecture Rules
 
-The document must be:
+Keep ETL/business logic in `app/core` and make it independently testable. Do not embed validation, transformation, database loading, or persistence rules inside PySide widgets when a core function is appropriate.
 
-* Extremely concise
-* Highly information-dense
-* Optimized for token efficiency
-* Structured for rapid context restoration
-* Written for senior software engineers only
-* Free of fluff, tutorials, or beginner explanations
+Keep PySide6 UI code in `app/ui`. UI pages should orchestrate shared state, user interaction, and calls into core modules. `MainWindow.state` is currently the cross-page mutable state contract.
 
-The goal is to maximize useful engineering context per token.
+Keep long-running GUI work in `app/workers` using `QObject`, `QThread`, and Qt signals. Avoid blocking the UI thread with file parsing, database validation, or inserts.
 
-Primary Objectives
+Use dataclasses in `app/core/models.py` as cross-module contracts. Preserve their fields unless all callers, serializers, tests, and saved-job compatibility are considered.
 
-1. Compress the entire project into an efficient operational reference
-2. Preserve architectural and implementation knowledge
-3. Reduce onboarding time for future sessions
-4. Prevent repeated rediscovery of project structure and conventions
-5. Enable safe continuation of development from scratch contexts
+## Module Boundaries
 
-Required Sections
-s
-1. Project Overview
+`app/main.py` bootstraps logging, `QApplication`, and `MainWindow`.
 
-* Application purpose
-* Core business logic
-* Primary workflows
-* Current project maturity/status
+`app/config/settings.py` owns platformdirs-backed config/log paths and logging setup.
 
-2. Tech Stack
+`app/core/file_loader.py` owns CSV/XLSX loading, dialect sniffing, sheet metadata, and header warnings.
 
-* Languages
-* Frameworks
-* Runtime versions
-* Major dependencies
-* Critical third-party services
+`app/core/db_connection.py` owns PostgreSQL URLs, SQLAlchemy engines, connection tests, and keyring password storage.
 
-3. Architecture Overview
+`app/core/db_introspection.py` owns schema/table/column/constraint introspection.
 
-Separate sections for:
+`app/core/mapping.py` owns table/column mapping suggestions and required-column checks.
 
-* Frontend
-* Backend
-* Infrastructure
-* Shared libraries/modules
+`app/core/transforms.py` owns transform functions and missing/null coercion semantics.
 
-Include:
+`app/core/validation.py` owns row validation, type coercion, uniqueness checks, foreign-key checks, and validation error export.
 
-* High-level execution flow
-* System boundaries
-* Communication patterns
-* Architectural decisions
-* Data flow
+`app/core/loader.py` owns dry-run summaries and transactional inserts.
 
-4. Directory Map
+`app/core/job_store.py` owns profile/job JSON persistence in the user config directory.
 
-Concise explanation of:
+`app/workers/*` bridge blocking core work to Qt threads/signals.
 
-* Important directories
-* Critical files
-* Entry points
-* Bootstrap/init flow
+## Security And Persistence
 
-Ignore trivial/generated folders.
+Never persist database passwords in JSON profiles, jobs, logs, tests, fixtures, screenshots, or error messages. Passwords belong in `keyring` via `app/core/db_connection.py`; profile JSON stores metadata and a password key only.
 
-5. Dependency Graph
+Do not log connection URLs, credentials, source file contents, or sensitive row values. Keep connection failure messages diagnostic but credential-safe.
 
-Generate concise dependency mapping including:
+Profiles and jobs live under `platformdirs.user_config_dir(APP_NAME, APP_AUTHOR)`. Logs live under `platformdirs.user_log_dir(...)`. Preserve saved-job/profile compatibility when changing serialized dataclasses.
 
-* Core internal module relationships
-* Service dependencies
-* Frontend/backend coupling
-* Circular dependency warnings
-* Critical dependency chains
+## Validation And Loading Rules
 
-Prefer compact text diagrams or bullet hierarchies over verbose explanations.
+Insert loads must remain blocked when `ValidationResult.has_blocking_errors` is true.
 
-6. Data Model Overview
+Dry-run mode must count transformed rows without inserting anything.
 
-* Core entities/models
-* Relationships
-* Ownership boundaries
-* Important schema assumptions
-* Migration strategy
-* Data lifecycle concerns
+Insert mode must preserve transactional behavior through `engine.begin()`. Cancellation or insert failure should roll back the active transaction.
 
-7. API and Integration Summary
+Be careful with PostgreSQL schema/table names, identity/generated columns, defaults, nullable columns, enums, numeric precision/scale, unique constraints, and foreign keys.
 
-* Important endpoints
-* Service contracts
-* Internal APIs
-* External integrations
-* Webhooks/events
-* Auth requirements
+Row-by-row uniqueness/FK database checks can be expensive on large datasets; optimize carefully and cover behavior with tests.
 
-8. State Management
+## Testing Expectations
 
-* Frontend state architecture
-* Cache layers
-* Persistence strategy
-* Synchronization patterns
-* Reactive/event systems
+Add or update tests in `tests/` for changes to mapping, transforms, validation, loader behavior, and job/profile serialization.
 
-9. Auth & Security
+Prefer focused core tests over GUI tests when behavior can be tested outside PySide. For UI changes, keep core behavior unchanged unless the requested work requires otherwise.
 
-* Authentication flow
-* Authorization model
-* Session/token handling
-* Security-sensitive areas
-* Permission boundaries
-* Secrets/config handling
+Existing tests cover mapping, transforms, validation, and job store round-trips; loader transactions, DB introspection, keyring behavior, and full UI flows are not currently well covered.
 
-10. Build / Run / Deploy
+## Packaging
 
-Minimal but complete commands for:
+The PyInstaller spec is `packaging/pyinstaller/etl-loader.spec`. It currently collects hidden imports for `psycopg` and `keyring.backends`. Update it if import paths, runtime dependencies, or packaging-sensitive modules change.
 
-* Install
-* Local development
-* Testing
-* Linting
-* Building
-* Deploying
-* Environment setup
+Build and verify artifacts on each target OS instead of assuming cross-compilation works.
 
-Include only commands actually used.
+## Development Conventions
 
-11. Development Conventions
+Use Python 3.11+ typing and the existing `from __future__ import annotations` pattern.
 
-Document:
+Prefer small, pure functions in `app/core`; keep side effects at boundaries such as files, keyring, database engines, Qt widgets, and logging.
 
-* Naming conventions
-* Architectural patterns
-* Code organization standards
-* Reusable abstractions
-* Error handling strategy
-* Logging conventions
-* Testing expectations
+Keep comments rare and operational. Do not add broad tutorials or generic framework explanations.
 
-12. Critical Engineering Knowledge
+Preserve existing user data semantics unless a migration/update path is included. Avoid broad refactors when a smaller correct change solves the task.
 
-Capture:
-
-* Hidden assumptions
-* Non-obvious implementation details
-* Important historical decisions
-* Fragile areas
-* Performance bottlenecks
-* Race conditions
-* Concurrency concerns
-* Scaling constraints
-* Known bugs
-* Technical debt
-
-Focus heavily on information future sessions are likely to miss.
-
-13. Dead Code & Cleanup Candidates
-
-Identify:
-
-* Unused files
-* Unused services
-* Dead components
-* Legacy code paths
-* Orphaned dependencies
-* Duplicate abstractions
-* Stale configs
-* Deprecated patterns
-
-Mark confidence level where uncertain.
-
-14. Safe Modification Guide
-
-Explain:
-
-* Files that should be modified carefully
-* High-risk systems
-* Common failure points
-* Required update sequences
-* Migration precautions
-* Testing requirements before merge/deploy
-* Areas where regressions are likely
-
-Optimize this section for preventing accidental breakage.
-
-15. Current Work / Open Problems
-
-Summarize:
-
-* Incomplete features
-* TODOs
-* Known blockers
-* Pending refactors
-* Areas requiring future attention
-
-16. AI Session Continuation Notes
-
-Create a compact section specifically optimized for future AI context restoration.
-
-Include:
-
-* Most important project facts
-* Current architectural assumptions
-* Active development areas
-* Immediate priorities
-* Critical files to read first
-
-This section should be maximally token-efficient.
-
-Maintenance Requirements
-
-`MEMORY.md` must be treated as a living document.
-
-Whenever significant code changes occur:
-
-* Update affected sections
-* Remove stale information
-* Keep summaries synchronized with the current architecture
-* Preserve token efficiency
-* Avoid uncontrolled document growth
-
-Prefer replacing outdated information over appending endlessly.
-
-Analysis Requirements
-
-While reviewing the project:
-
-* Identify actual runtime flows
-* Trace important execution paths
-* Infer architectural intent where necessary
-* Detect inconsistencies between architecture and implementation
-* Flag suspicious or fragile patterns
-* Detect overengineering and unnecessary abstractions
-* Detect tight coupling and scalability risks
-* Detect missing tests around critical logic
-
-Do not produce generic documentation.
-
-Do not summarize obvious framework behavior.
-
-Do not explain standard programming concepts.
-
-Only preserve information that materially improves future engineering effectiveness.
-
-The final result should feel like compressed operational memory for a senior engineer continuing development on a large unfamiliar codebase.
+Update `MEMORY.md` whenever significant architecture, workflow, dependency, persistence, validation, loading, or packaging behavior changes. Replace stale facts instead of appending endlessly.
