@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import QListWidget, QMainWindow, QStackedWidget, QWidget, QHBoxLayout
+
+from app.core.db_connection import dispose_engine
 
 from app.ui.column_mapping_page import ColumnMappingPage
 from app.ui.db_connection_page import DbConnectionPage
@@ -47,3 +50,8 @@ class MainWindow(QMainWindow):
         for _, page in self.pages:
             if hasattr(page, "refresh"):
                 page.refresh()
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        dispose_engine(self.state.get("engine"))
+        self.state.pop("engine", None)
+        super().closeEvent(event)

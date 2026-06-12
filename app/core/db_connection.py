@@ -40,6 +40,12 @@ def create_postgres_engine(profile: ConnectionProfile, password: str | None = No
     return create_engine(build_url(profile, password if password is not None else get_password(profile)), future=True)
 
 
+def dispose_engine(engine: Engine | None) -> None:
+    if engine is None:
+        return
+    engine.dispose()
+
+
 def test_connection(profile: ConnectionProfile, password: str | None = None) -> tuple[bool, str]:
     try:
         engine = create_postgres_engine(profile, password)

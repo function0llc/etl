@@ -124,6 +124,8 @@ TRANSFORMS = {
     "parse_json": parse_json,
 }
 
+UI_TRANSFORMS = [*TRANSFORMS.keys(), "constant_value"]
+
 
 def apply_transform(name: str | None, value: Any, constant_value: Any = None) -> Any:
     if name == "constant_value":

@@ -44,7 +44,7 @@ Data flow: source file -> `SourceDataset`; DB connection -> SQLAlchemy `Engine` 
 
 `app/workers/*`: QObject workers for validation/load threads.
 
-`tests/`: pytest coverage for mapping, transforms, validation, job store.
+`tests/`: pytest coverage for mapping, transforms, validation, loader transactions, and job store.
 
 `packaging/pyinstaller/etl-loader.spec`: PyInstaller app bundle spec.
 
@@ -100,13 +100,13 @@ Python modules use `from __future__ import annotations` and dataclasses. Keep co
 
 ## Critical Engineering Knowledge
 
-`DbConnectionPage` stores an open SQLAlchemy `Engine` in UI state and does not visibly dispose it on window close/profile switch; lifecycle leaks are possible.
+`MainWindow.closeEvent` now disposes the active SQLAlchemy `Engine`; `DbConnectionPage` also disposes the previous engine when replacing a connection and disposes failed new engines on introspection failure.
 
 `load_source_file_full()` loads full source files into memory; large files are a scalability risk.
 
 Validation unique/FK checks query row-by-row and can be slow on large batches.
 
-`ColumnMappingPage` displays auto-mappings but does not currently provide interactive editing for transforms/constants.
+`ColumnMappingPage` now renders editable per-target-column rows with source selection, transform selection (including `constant_value`), constant input, and required/status feedback; mapping edits clear stale validation state.
 
 Load path uses one `engine.begin()` transaction for all mapped tables; failure/cancel raises and should roll back.
 
@@ -122,7 +122,7 @@ Medium confidence: `to_jsonable()` is unused in current persistence path.
 
 High confidence: prior generic `AGENTS.md` had stale/non-project-specific content and a stray `s`; rewritten.
 
-Coverage gaps: loader transaction behavior, DB introspection, keyring/profile edge cases, QThread/UI workflow.
+Coverage gaps: DB introspection, keyring/profile edge cases beyond basic persistence, and full QThread/UI workflows.
 
 ## Safe Modification Guide
 
@@ -138,7 +138,7 @@ When changing dependencies/imports, review PyInstaller hidden imports.
 
 ## Current Work / Open Problems
 
-Project-specific `AGENTS.md` and this `MEMORY.md` were added to replace generic AI instructions. Open engineering concerns: large-file memory use, row-by-row DB validation performance, incomplete mapping UI editing, engine lifecycle, unimplemented per-table transaction strategy.
+Project-specific `AGENTS.md` and this `MEMORY.md` were added to replace generic AI instructions. Open engineering concerns: large-file memory use, row-by-row DB validation performance, synchronous file load/DB introspection on the UI thread, and unimplemented per-table transaction strategy.
 
 ## AI Session Continuation Notes
 

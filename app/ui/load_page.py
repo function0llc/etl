@@ -16,17 +16,19 @@ class LoadPage(QWidget):
         self.status = QLabel("Load is enabled after validation passes.")
         self.summary = QTextEdit()
         self.summary.setReadOnly(True)
-        dry_run = QPushButton("Dry Run")
-        dry_run.clicked.connect(lambda: self.load(True))
-        load = QPushButton("Insert Rows")
-        load.clicked.connect(lambda: self.load(False))
+        self.dry_run_button = QPushButton("Dry Run")
+        self.dry_run_button.clicked.connect(lambda: self.load(True))
+        self.load_button = QPushButton("Insert Rows")
+        self.load_button.clicked.connect(lambda: self.load(False))
         layout = QVBoxLayout(self)
-        layout.addWidget(dry_run)
-        layout.addWidget(load)
+        layout.addWidget(self.dry_run_button)
+        layout.addWidget(self.load_button)
         layout.addWidget(self.status)
         layout.addWidget(self.summary)
 
     def load(self, dry_run: bool) -> None:
+        if self.thread is not None:
+            return
         validation = self.state.get("validation")
         engine = self.state.get("engine")
         if not validation or not engine:
@@ -35,14 +37,21 @@ class LoadPage(QWidget):
         if validation.has_blocking_errors:
             self.status.setText("Blocking validation errors prevent load.")
             return
+        self._set_loading_state(True)
+        self.status.setText("Dry run in progress..." if dry_run else "Insert in progress...")
         self.thread = QThread()
         self.worker = LoadWorker(engine, validation, dry_run)
         self.worker.moveToThread(self.thread)
         self.thread.started.connect(self.worker.run)
+        self.worker.progress.connect(self.status.setText)
         self.worker.finished.connect(self._finished)
         self.worker.failed.connect(self._failed)
         self.worker.finished.connect(self.thread.quit)
         self.worker.failed.connect(self.thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.worker.failed.connect(self.worker.deleteLater)
+        self.thread.finished.connect(self.thread.deleteLater)
+        self.thread.finished.connect(self._reset_worker_state)
         self.thread.start()
 
     def _finished(self, summary) -> None:
@@ -54,3 +63,12 @@ class LoadPage(QWidget):
 
     def _failed(self, message: str) -> None:
         self.status.setText(f"Load failed and transaction was rolled back: {message}")
+
+    def _set_loading_state(self, loading: bool) -> None:
+        self.dry_run_button.setEnabled(not loading)
+        self.load_button.setEnabled(not loading)
+
+    def _reset_worker_state(self) -> None:
+        self.thread = None
+        self.worker = None
+        self._set_loading_state(False)

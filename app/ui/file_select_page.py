@@ -32,6 +32,8 @@ class FileSelectPage(QWidget):
         try:
             dataset = load_source_file_full(path)
             self.state["dataset"] = dataset
+            self.state.pop("mappings", None)
+            self.state.pop("validation", None)
             messages = validate_source_headers(dataset)
             self.status.setText("; ".join(messages) if messages else f"Loaded {len(dataset.sheets)} source table(s)")
             self._render_preview(next(iter(dataset.sheets.values())))

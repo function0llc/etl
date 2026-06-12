@@ -51,3 +51,35 @@ def required_columns(table: TableDefinition, mappings: list[ColumnMapping]) -> l
 
 def mapping_complete(table: TableDefinition, mapping: TableMapping) -> bool:
     return not required_columns(table, mapping.column_mappings)
+
+
+def target_columns_for_mapping(table: TableDefinition) -> list[ColumnDefinition]:
+    return [column for column in table.columns if not column.is_identity and not column.is_generated]
+
+
+def source_options_for_sheet(sheet: SourceSheet) -> list[str]:
+    return [header for header in sheet.headers if header]
+
+
+def update_column_mapping(
+    mapping: TableMapping,
+    target_column: str,
+    source_column: str | None,
+    transform: str | None = None,
+    constant_value: object | None = None,
+) -> TableMapping:
+    filtered = [item for item in mapping.column_mappings if item.target_column != target_column]
+    filtered.append(
+        ColumnMapping(
+            source_column=source_column,
+            target_column=target_column,
+            transform=transform,
+            constant_value=constant_value,
+        )
+    )
+    return TableMapping(
+        source_sheet=mapping.source_sheet,
+        target_schema=mapping.target_schema,
+        target_table=mapping.target_table,
+        column_mappings=filtered,
+    )
